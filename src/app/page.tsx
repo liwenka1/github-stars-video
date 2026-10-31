@@ -11,12 +11,67 @@ import {
 import { emptyProps, type Props } from '@/video/schema'
 import { Player } from '@remotion/player'
 import { renderMediaOnWeb } from '@remotion/web-renderer'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type CSSProperties, type FormEvent } from 'react'
 
 const TOKEN_KEY = 'gsw-token'
+const REPO_KEY = 'gsw-repo'
+const THEME_KEY = 'gsw-theme'
+const CURRENT_REPO_URL = 'https://github.com/liwenka1/github-stars-video'
+const CURRENT_REPO_LABEL = 'liwenka1/github-stars-video'
 const durationInFrames = (animationDurationInSeconds + 1) * fps
 
 type Phase = 'idle' | 'loading' | 'ready' | 'rendering' | 'done'
+type Theme = 'light' | 'dark'
+
+function ArrowUpRightIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="icon">
+      <path d="M7 17 17 7M8 7h9v9" />
+    </svg>
+  )
+}
+
+function GitHubIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="icon github-icon">
+      <path d="M12 .5a11.5 11.5 0 0 0-3.6 22.4c.6.1.8-.3.8-.6v-2.2c-3.3.7-4-1.4-4-1.4-.5-1.4-1.3-1.8-1.3-1.8-1.1-.8.1-.8.1-.8 1.2.1 1.8 1.3 1.8 1.3 1.1 1.8 2.9 1.3 3.6 1 .1-.8.4-1.3.7-1.6-2.7-.3-5.6-1.3-5.6-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.6.1-3.2 0 0 1-.3 3.3 1.2a11.4 11.4 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.6.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.9 5.6-5.6 5.9.4.3.7 1 .7 2v2.9c0 .3.2.7.8.6A11.5 11.5 0 0 0 12 .5Z" />
+    </svg>
+  )
+}
+
+function LockIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="icon">
+      <rect x="5" y="10" width="14" height="10" rx="2" />
+      <path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v2" />
+    </svg>
+  )
+}
+
+function MoonIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="icon">
+      <path d="M20 15.2A8.5 8.5 0 0 1 8.8 4 8.5 8.5 0 1 0 20 15.2Z" />
+    </svg>
+  )
+}
+
+function SunIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="icon">
+      <circle cx="12" cy="12" r="3.5" />
+      <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+    </svg>
+  )
+}
+
+function MarkIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="icon brand-mark-icon">
+      <path d="m12 3 2.2 5.4 5.8.5-4.4 3.8 1.4 5.7-5-3-5 3 1.4-5.7L4 8.9l5.8-.5L12 3Z" />
+    </svg>
+  )
+}
 
 export default function Home() {
   const [token, setToken] = useState('')
@@ -30,22 +85,36 @@ export default function Home() {
   const [progress, setProgress] = useState(0)
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
   const [renderSeconds, setRenderSeconds] = useState<number | null>(null)
+  const [theme, setTheme] = useState<Theme>('light')
 
-  // token 只存在本机浏览器，不经过任何服务器
   useEffect(() => {
-    const saved = localStorage.getItem(TOKEN_KEY)
-    if (saved) {
-      setToken(saved)
-      setRepoInput((current) => current || localStorage.getItem('gsw-repo') || '')
+    setToken(localStorage.getItem(TOKEN_KEY) ?? '')
+    setRepoInput(localStorage.getItem(REPO_KEY) ?? '')
+
+    const savedTheme = localStorage.getItem(THEME_KEY)
+    if (savedTheme === 'dark' || savedTheme === 'light') {
+      setTheme(savedTheme)
+      return
+    }
+
+    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      setTheme('dark')
     }
   }, [])
 
-  const load = async () => {
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    localStorage.setItem(THEME_KEY, theme)
+  }, [theme])
+
+  const load = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
     setPhase('loading')
     setError(null)
     setVideoUrl(null)
     setRenderSeconds(null)
     setProps(emptyProps)
+
     try {
       const data = await fetchRepoData(repoInput, token, setStep)
       setProps(data)
@@ -55,7 +124,7 @@ export default function Home() {
       } else {
         localStorage.removeItem(TOKEN_KEY)
       }
-      localStorage.setItem('gsw-repo', repoInput)
+      localStorage.setItem(REPO_KEY, repoInput)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
       setPhase('idle')
@@ -70,6 +139,7 @@ export default function Home() {
     setProgress(0)
     setVideoUrl(null)
     const startedAt = Date.now()
+
     try {
       const { getBlob } = await renderMediaOnWeb({
         composition: {
@@ -83,7 +153,7 @@ export default function Home() {
           defaultProps: props,
         },
         inputProps: props,
-        onProgress: (p) => setProgress(Math.round(p.progress * 100)),
+        onProgress: (value) => setProgress(Math.round(value.progress * 100)),
       })
       const blob = await getBlob()
       setRenderSeconds(Math.round((Date.now() - startedAt) / 1000))
@@ -97,207 +167,223 @@ export default function Home() {
 
   const busy = phase === 'loading' || phase === 'rendering'
   const ready = Boolean(props.user && props.repository)
+  const themeLabel = theme === 'dark' ? '浅色' : '深色'
 
   return (
-    <main style={styles.page}>
-      <header style={styles.header}>
-        <h1 style={styles.h1}>GitHub Stars Video</h1>
-        <p style={styles.sub}>
-          为你的 GitHub 仓库生成一段 star 纪念视频 · 渲染全程在你的浏览器里完成，服务器不参与
-        </p>
+    <div className="site-shell">
+      <header className="site-header">
+        <a className="brand-mark-link" href="/" aria-label="GitHub Stars Video">
+          <span className="brand-mark">
+            <MarkIcon />
+          </span>
+        </a>
+
+        <div className="site-actions">
+          <a
+            className="icon-link"
+            href={CURRENT_REPO_URL}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`打开 ${CURRENT_REPO_LABEL}`}
+            title={CURRENT_REPO_LABEL}
+          >
+            <GitHubIcon />
+          </a>
+          <button
+            type="button"
+            className="theme-toggle"
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            aria-label={`切换到${themeLabel}模式`}
+            title={`切换到${themeLabel}模式`}
+          >
+            {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
+          </button>
+        </div>
       </header>
 
-      <section style={styles.card}>
-        <label style={styles.label}>GitHub token</label>
-        <input
-          type="password"
-          value={token}
-          onChange={(e) => setToken(e.target.value)}
-          placeholder="github_pat_... 或 ghp_..."
-          style={styles.input}
-          autoComplete="off"
-        />
-        <p style={styles.hint}>
-          只保存在你自己的浏览器（localStorage），不会发给任何服务器。需要{' '}
-          <b>Contents: Read and write</b> 权限才能读取点赞者名单——GitHub 从 2026-06-30
-          起只允许仓库的 admin/协作者查看它。
-        </p>
+      <main className="main-content">
+        <h1 className="page-title">GitHub Stars Video</h1>
+        <p className="page-motto">A small celebration for your repository.</p>
 
-        <label style={{ ...styles.label, marginTop: 18 }}>仓库</label>
-        <input
-          type="text"
-          value={repoInput}
-          onChange={(e) => setRepoInput(e.target.value)}
-          placeholder="owner/repo，例如 liwenka1/next-web-nav"
-          style={styles.input}
-        />
-
-        <label style={styles.checkboxRow}>
-          <input
-            type="checkbox"
-            checked={remember}
-            onChange={(e) => setRemember(e.target.checked)}
-          />
-          <span>在本机记住 token</span>
-        </label>
-
-        <button onClick={load} disabled={busy || !repoInput} style={styles.primaryButton}>
-          {phase === 'loading' ? step || '读取中…' : '读取仓库数据'}
-        </button>
-
-        {error && <pre style={styles.error}>{error}</pre>}
-      </section>
-
-      {ready && (
-        <section style={styles.card}>
-          <div style={styles.statsRow}>
-            <span>
-              <b>{props.user}</b>/{props.repository}
-            </span>
-            <span>{props.stars.toLocaleString('en-US')} stars</span>
-            <span>{props.stargazers.length} 个头像</span>
+        <article className="content-flow">
+          <div className="content-block enter" style={{ '--delay': '90ms' } as CSSProperties}>
+            <p className="intro-text">
+              为你的 GitHub 仓库生成一段 star 纪念视频。输入仓库地址，读取最近的 star 用户，所有渲染都在浏览器里完成。
+            </p>
           </div>
 
-          <Player
-            component={GitHubStarsComposition}
-            inputProps={props}
-            durationInFrames={durationInFrames}
-            fps={fps}
-            compositionWidth={width}
-            compositionHeight={height}
-            style={styles.player}
-            controls
-            loop
-          />
+          <section className="content-block enter" style={{ '--delay': '180ms' } as CSSProperties}>
+            <p className="section-label">开始</p>
+            <p className="section-lead">从一个仓库开始</p>
 
-          <button
-            onClick={exportVideo}
-            disabled={busy}
-            style={{ ...styles.primaryButton, marginTop: 16 }}
-          >
-            {phase === 'rendering' ? `导出中… ${progress}%` : '导出 MP4（浏览器内渲染）'}
-          </button>
+            <form className="form-panel" onSubmit={load}>
+              <div className="field-group">
+                <label className="field-label" htmlFor="github-token">
+                  GitHub token <span>fine-grained</span>
+                </label>
+                <div className="input-shell">
+                  <LockIcon />
+                  <input
+                    id="github-token"
+                    type="password"
+                    value={token}
+                    onChange={(event) => setToken(event.target.value)}
+                    placeholder="github_pat_... 或 ghp_..."
+                    autoComplete="off"
+                  />
+                </div>
+                <p className="field-hint">
+                  需要 <b>Contents: Read and write</b> 权限，token 只会保存在你的浏览器里。
+                </p>
+              </div>
 
-          {phase === 'rendering' && (
-            <div style={styles.progressTrack}>
-              <div style={{ ...styles.progressBar, width: `${progress}%` }} />
-            </div>
+              <div className="field-group">
+                <label className="field-label" htmlFor="repository">
+                  仓库路径 <span>owner / repository</span>
+                </label>
+                <div className="input-shell">
+                  <span className="input-prefix">github.com/</span>
+                  <input
+                    id="repository"
+                    type="text"
+                    value={repoInput}
+                    onChange={(event) => setRepoInput(event.target.value)}
+                    placeholder={CURRENT_REPO_LABEL}
+                    autoComplete="url"
+                  />
+                </div>
+              </div>
+
+              <label className="remember-control">
+                <input
+                  type="checkbox"
+                  checked={remember}
+                  onChange={(event) => setRemember(event.target.checked)}
+                />
+                <span>在这台设备记住 token</span>
+              </label>
+
+              <div className="form-actions">
+                <button className="primary-button" type="submit" disabled={busy || !repoInput.trim()}>
+                  <span>{phase === 'loading' ? step || '正在读取…' : '读取仓库数据'}</span>
+                  {phase === 'loading' ? <span className="button-spinner" /> : <ArrowUpRightIcon />}
+                </button>
+              </div>
+
+              {error && (
+                <div className="error-message" role="alert">
+                  <span>读取失败</span>
+                  <p>{error}</p>
+                </div>
+              )}
+            </form>
+          </section>
+
+          <section className="content-block enter" style={{ '--delay': '270ms' } as CSSProperties}>
+            <p className="section-label">视频设定</p>
+            <ul className="spec-list">
+              <li>1280 × 720</li>
+              <li>约 4 秒</li>
+              <li>60 FPS</li>
+              <li>最近 50 位头像</li>
+            </ul>
+            <p className="privacy-note">
+              <LockIcon />
+              <span>数据读取和视频渲染都发生在你的浏览器里。</span>
+            </p>
+          </section>
+
+          {ready && (
+            <section className="content-block result-section enter" style={{ '--delay': '90ms' } as CSSProperties}>
+              <div className="result-heading">
+                <div>
+                  <p className="section-label">预览</p>
+                  <p className="section-lead">你的星光已经准备好了</p>
+                </div>
+                <div className="repo-identity">
+                  {props.userAvatarUrl ? <img src={props.userAvatarUrl} alt="" /> : <span className="avatar-fallback" />}
+                  <span>
+                    <b>{props.user}</b>
+                    <span>/{props.repository}</span>
+                  </span>
+                </div>
+              </div>
+
+              <div className="stats-row" aria-label="仓库统计">
+                <span>
+                  <strong>{props.stars.toLocaleString('en-US')}</strong> stars
+                </span>
+                <span>
+                  <strong>{props.stargazers.length}</strong> 个头像
+                </span>
+                <span>浏览器端渲染</span>
+              </div>
+
+              <div className="player-frame">
+                <Player
+                  component={GitHubStarsComposition}
+                  inputProps={props}
+                  durationInFrames={durationInFrames}
+                  fps={fps}
+                  compositionWidth={width}
+                  compositionHeight={height}
+                  style={{ width: '100%' }}
+                  controls
+                  loop
+                />
+              </div>
+
+              <div className="export-row">
+                <div>
+                  <p className="export-title">预览满意了吗？</p>
+                  <p className="export-copy">视频会在当前设备上编码，不会上传到服务器。</p>
+                </div>
+                <button className="primary-button export-button" type="button" onClick={exportVideo} disabled={busy}>
+                  <span>{phase === 'rendering' ? `导出中… ${progress}%` : '导出 MP4'}</span>
+                  {phase === 'rendering' ? <span className="button-spinner" /> : <ArrowUpRightIcon />}
+                </button>
+              </div>
+
+              {phase === 'rendering' && (
+                <div className="progress-track" aria-label={`导出进度 ${progress}%`}>
+                  <div className="progress-bar" style={{ width: `${progress}%` }} />
+                </div>
+              )}
+
+              {videoUrl && (
+                <div className="download-panel">
+                  <div>
+                    <p className="section-label">完成</p>
+                    <p className="section-lead">视频已经准备好了</p>
+                    <p className="download-copy">
+                      {renderSeconds ? `本次渲染用了 ${renderSeconds} 秒。` : '可以先预览，再保存到本地。'}
+                    </p>
+                  </div>
+                  <video src={videoUrl} controls className="result-video" />
+                  <a className="secondary-button" href={videoUrl} download={`${props.user}-${props.repository}.mp4`}>
+                    下载 MP4
+                    <ArrowUpRightIcon />
+                  </a>
+                </div>
+              )}
+            </section>
           )}
+        </article>
+      </main>
 
-          {videoUrl && (
-            <div style={{ marginTop: 16 }}>
-              <video src={videoUrl} controls style={styles.video} />
-              <a
-                href={videoUrl}
-                download={`${props.user}-${props.repository}.mp4`}
-                style={{
-                  ...styles.primaryButton,
-                  display: 'block',
-                  textAlign: 'center',
-                  textDecoration: 'none',
-                }}
-              >
-                下载 MP4{renderSeconds ? `（渲染用了 ${renderSeconds} 秒）` : ''}
-              </a>
-            </div>
-          )}
-        </section>
-      )}
-
-      <footer style={styles.footer}>
-        视频效果与{' '}
-        <a href="https://github.com/scastiel/github-stars-video" style={styles.link}>
-          scastiel/github-stars-video
-        </a>{' '}
-        保持一致 · 本版改用浏览器端渲染，可部署在 Vercel 免费版
+      <footer className="site-footer">
+        <span>Made in browser · GitHub Stars Video</span>
+        <a
+          className="icon-link"
+          href={CURRENT_REPO_URL}
+          target="_blank"
+          rel="noreferrer"
+          aria-label={`打开 ${CURRENT_REPO_LABEL}`}
+          title={CURRENT_REPO_LABEL}
+        >
+          <GitHubIcon />
+        </a>
       </footer>
-    </main>
+    </div>
   )
-}
-
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: '100vh',
-    background: '#0b1220',
-    color: '#e2e8f0',
-    padding: '48px 20px 64px',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 24,
-  },
-  header: { textAlign: 'center', maxWidth: 640 },
-  h1: { margin: 0, fontSize: 34, letterSpacing: -0.5 },
-  sub: { margin: '10px 0 0', color: '#94a3b8', fontSize: 15, lineHeight: 1.6 },
-  card: {
-    width: '100%',
-    maxWidth: 720,
-    background: '#131c2e',
-    border: '1px solid #22304a',
-    borderRadius: 14,
-    padding: 24,
-  },
-  label: { display: 'block', fontSize: 14, color: '#94a3b8', marginBottom: 8 },
-  input: {
-    width: '100%',
-    padding: '11px 13px',
-    borderRadius: 9,
-    border: '1px solid #2c3c58',
-    background: '#0e1626',
-    color: '#e2e8f0',
-    fontSize: 15,
-    outline: 'none',
-  },
-  hint: { margin: '10px 0 0', fontSize: 12.5, color: '#7c8aa3', lineHeight: 1.6 },
-  checkboxRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 16,
-    fontSize: 13.5,
-    color: '#94a3b8',
-  },
-  primaryButton: {
-    width: '100%',
-    marginTop: 18,
-    padding: '12px 16px',
-    borderRadius: 9,
-    border: 'none',
-    background: '#3b82f6',
-    color: 'white',
-    fontSize: 15,
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  error: {
-    marginTop: 16,
-    padding: 12,
-    borderRadius: 9,
-    background: '#3f1d24',
-    color: '#fca5a5',
-    fontSize: 12.5,
-    whiteSpace: 'pre-wrap',
-    maxHeight: 240,
-    overflow: 'auto',
-  },
-  statsRow: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: 16,
-    fontSize: 14,
-    color: '#94a3b8',
-    marginBottom: 16,
-  },
-  player: { width: '100%', borderRadius: 10, overflow: 'hidden' },
-  progressTrack: {
-    marginTop: 12,
-    height: 6,
-    borderRadius: 3,
-    background: '#22304a',
-    overflow: 'hidden',
-  },
-  progressBar: { height: '100%', background: '#3b82f6', transition: 'width .2s' },
-  video: { width: '100%', borderRadius: 10, marginBottom: 12 },
-  footer: { fontSize: 12.5, color: '#64748b', textAlign: 'center', marginTop: 8 },
-  link: { color: '#7ba7e0' },
 }
