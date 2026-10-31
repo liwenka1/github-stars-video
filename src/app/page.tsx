@@ -1,14 +1,12 @@
 'use client'
 
 import { fetchRepoData } from '@/lib/github'
-import {
-  GitHubStarsComposition,
-  animationDurationInSeconds,
-  fps,
-  height,
-  width,
-} from '@/video/composition'
-import { emptyProps, type Props } from '@/video/schema'
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
+import { GitHubStarsComposition } from '@/video/composition'
+import { DEFAULT_VIDEO_SETTINGS, emptyProps, type Props, type VideoSettings } from '@/video/schema'
 import { Player } from '@remotion/player'
 import { renderMediaOnWeb } from '@remotion/web-renderer'
 import { useEffect, useState, type CSSProperties, type FormEvent } from 'react'
@@ -18,7 +16,16 @@ const REPO_KEY = 'gsw-repo'
 const THEME_KEY = 'gsw-theme'
 const CURRENT_REPO_URL = 'https://github.com/liwenka1/github-stars-video'
 const CURRENT_REPO_LABEL = 'liwenka1/github-stars-video'
-const durationInFrames = (animationDurationInSeconds + 1) * fps
+
+const RESOLUTION_OPTIONS = [
+  { label: '1280 × 720', width: 1280, height: 720 },
+  { label: '1920 × 1080', width: 1920, height: 1080 },
+  { label: '1080 × 1080', width: 1080, height: 1080 },
+  { label: '1080 × 1920', width: 1080, height: 1920 },
+]
+const DURATION_OPTIONS = [2, 4, 6, 8]
+const FPS_OPTIONS = [30, 60]
+const AVATAR_OPTIONS = [10, 25, 50]
 
 type Phase = 'idle' | 'loading' | 'ready' | 'rendering' | 'done'
 type Theme = 'light' | 'dark'
@@ -44,6 +51,15 @@ function LockIcon() {
     <svg viewBox="0 0 24 24" aria-hidden="true" className="icon">
       <rect x="5" y="10" width="14" height="10" rx="2" />
       <path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v2" />
+    </svg>
+  )
+}
+
+function ResetIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="icon">
+      <path d="M3 12a9 9 0 1 0 3-6.7" />
+      <path d="M3 4v6h6" />
     </svg>
   )
 }
@@ -86,6 +102,7 @@ export default function Home() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
   const [renderSeconds, setRenderSeconds] = useState<number | null>(null)
   const [theme, setTheme] = useState<Theme>('light')
+  const [settings, setSettings] = useState<VideoSettings>(DEFAULT_VIDEO_SETTINGS)
 
   useEffect(() => {
     setToken(localStorage.getItem(TOKEN_KEY) ?? '')
@@ -117,7 +134,7 @@ export default function Home() {
 
     try {
       const data = await fetchRepoData(repoInput, token, setStep)
-      setProps(data)
+      setProps({ ...data, videoSettings: settings })
       setPhase('ready')
       if (remember) {
         localStorage.setItem(TOKEN_KEY, token)
@@ -139,6 +156,12 @@ export default function Home() {
     setProgress(0)
     setVideoUrl(null)
     const startedAt = Date.now()
+    const durationInFrames = Math.max(1, Math.round(settings.durationInSeconds * settings.fps))
+    const renderProps = {
+      ...props,
+      videoSettings: settings,
+      stargazers: props.stargazers.slice(-settings.avatarLimit),
+    }
 
     try {
       const { getBlob } = await renderMediaOnWeb({
@@ -146,13 +169,13 @@ export default function Home() {
           id: 'GitHubStars',
           component: GitHubStarsComposition,
           durationInFrames,
-          fps,
-          width,
-          height,
+          fps: settings.fps,
+          width: settings.width,
+          height: settings.height,
           calculateMetadata: null,
-          defaultProps: props,
+          defaultProps: renderProps,
         },
-        inputProps: props,
+        inputProps: renderProps,
         onProgress: (value) => setProgress(Math.round(value.progress * 100)),
       })
       const blob = await getBlob()
@@ -168,6 +191,26 @@ export default function Home() {
   const busy = phase === 'loading' || phase === 'rendering'
   const ready = Boolean(props.user && props.repository)
   const themeLabel = theme === 'dark' ? '浅色' : '深色'
+  const previewProps: Props = ready
+    ? {
+        ...props,
+        videoSettings: settings,
+        stargazers: props.stargazers.slice(-settings.avatarLimit),
+      }
+    : props
+  const previewDurationInFrames = Math.max(1, Math.round(settings.durationInSeconds * settings.fps))
+
+  const updateSettings = (updates: Partial<VideoSettings>) => {
+    setSettings((current) => ({ ...current, ...updates }))
+    setVideoUrl((current) => {
+      if (current) URL.revokeObjectURL(current)
+      return null
+    })
+    setRenderSeconds(null)
+    setPhase((current) => (current === 'done' ? 'ready' : current))
+  }
+
+  const resetSettings = () => updateSettings(DEFAULT_VIDEO_SETTINGS)
 
   return (
     <div className="site-shell">
@@ -179,25 +222,32 @@ export default function Home() {
         </a>
 
         <div className="site-actions">
-          <a
+          <Button
+            variant="ghost"
+            size="icon-xs"
             className="icon-link"
-            href={CURRENT_REPO_URL}
-            target="_blank"
-            rel="noreferrer"
-            aria-label={`打开 ${CURRENT_REPO_LABEL}`}
-            title={CURRENT_REPO_LABEL}
+            render={
+              <a
+                href={CURRENT_REPO_URL}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={`打开 ${CURRENT_REPO_LABEL}`}
+                title={CURRENT_REPO_LABEL}
+              />
+            }
           >
             <GitHubIcon />
-          </a>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-xs"
             className="theme-toggle"
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             aria-label={`切换到${themeLabel}模式`}
             title={`切换到${themeLabel}模式`}
           >
             {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
-          </button>
+          </Button>
         </div>
       </header>
 
@@ -223,7 +273,7 @@ export default function Home() {
                 </label>
                 <div className="input-shell">
                   <LockIcon />
-                  <input
+                  <Input
                     id="github-token"
                     type="password"
                     value={token}
@@ -243,7 +293,7 @@ export default function Home() {
                 </label>
                 <div className="input-shell">
                   <span className="input-prefix">github.com/</span>
-                  <input
+                  <Input
                     id="repository"
                     type="text"
                     value={repoInput}
@@ -255,19 +305,15 @@ export default function Home() {
               </div>
 
               <label className="remember-control">
-                <input
-                  type="checkbox"
-                  checked={remember}
-                  onChange={(event) => setRemember(event.target.checked)}
-                />
+                <Checkbox checked={remember} onCheckedChange={(checked) => setRemember(checked)} />
                 <span>在这台设备记住 token</span>
               </label>
 
               <div className="form-actions">
-                <button className="primary-button" type="submit" disabled={busy || !repoInput.trim()}>
+                <Button className="primary-button" type="submit" disabled={busy || !repoInput.trim()}>
                   <span>{phase === 'loading' ? step || '正在读取…' : '读取仓库数据'}</span>
                   {phase === 'loading' ? <span className="button-spinner" /> : <ArrowUpRightIcon />}
-                </button>
+                </Button>
               </div>
 
               {error && (
@@ -280,16 +326,83 @@ export default function Home() {
           </section>
 
           <section className="content-block enter" style={{ '--delay': '270ms' } as CSSProperties}>
-            <p className="section-label">视频设定</p>
-            <ul className="spec-list">
-              <li>1280 × 720</li>
-              <li>约 4 秒</li>
-              <li>60 FPS</li>
-              <li>最近 50 位头像</li>
-            </ul>
+            <div className="settings-heading">
+              <div>
+                <p className="section-label">视频设定</p>
+                <p className="section-lead">按照你的方式调整</p>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className="reset-button"
+                type="button"
+                onClick={resetSettings}
+                disabled={busy}
+                aria-label="恢复默认视频设定"
+                title="恢复默认视频设定"
+              >
+                <ResetIcon />
+              </Button>
+            </div>
+
+            <div className="settings-grid">
+              <label className="setting-field">
+                <span>画布</span>
+                <Select
+                  value={`${settings.width}x${settings.height}`}
+                  options={RESOLUTION_OPTIONS.map((option) => ({
+                    label: option.label,
+                    value: `${option.width}x${option.height}`,
+                  }))}
+                  onValueChange={(value) => {
+                    const option = RESOLUTION_OPTIONS.find((item) => `${item.width}x${item.height}` === value)
+                    if (option) updateSettings({ width: option.width, height: option.height })
+                  }}
+                  disabled={busy}
+                  aria-label="画布尺寸"
+                />
+              </label>
+
+              <label className="setting-field">
+                <span>时长</span>
+                <Select
+                  value={String(settings.durationInSeconds)}
+                  options={DURATION_OPTIONS.map((seconds) => ({
+                    label: `约 ${seconds} 秒`,
+                    value: String(seconds),
+                  }))}
+                  onValueChange={(value) => updateSettings({ durationInSeconds: Number(value) })}
+                  disabled={busy}
+                  aria-label="视频时长"
+                />
+              </label>
+
+              <label className="setting-field">
+                <span>帧率</span>
+                <Select
+                  value={String(settings.fps)}
+                  options={FPS_OPTIONS.map((value) => ({ label: `${value} FPS`, value: String(value) }))}
+                  onValueChange={(value) => updateSettings({ fps: Number(value) })}
+                  disabled={busy}
+                  aria-label="视频帧率"
+                />
+              </label>
+
+              <label className="setting-field">
+                <span>头像数量</span>
+                <Select
+                  value={String(settings.avatarLimit)}
+                  options={AVATAR_OPTIONS.map((value) => ({ label: `最近 ${value} 位`, value: String(value) }))}
+                  onValueChange={(value) => updateSettings({ avatarLimit: Number(value) })}
+                  disabled={busy}
+                  aria-label="头像数量"
+                />
+              </label>
+            </div>
+
             <p className="privacy-note">
               <LockIcon />
-              <span>数据读取和视频渲染都发生在你的浏览器里。</span>
+              <span>设置会同步到预览和导出；数据读取和视频渲染都发生在你的浏览器里。</span>
             </p>
           </section>
 
@@ -314,19 +427,20 @@ export default function Home() {
                   <strong>{props.stars.toLocaleString('en-US')}</strong> stars
                 </span>
                 <span>
-                  <strong>{props.stargazers.length}</strong> 个头像
+                  <strong>{previewProps.stargazers.length}</strong> 个头像
                 </span>
                 <span>浏览器端渲染</span>
               </div>
 
               <div className="player-frame">
                 <Player
+                  key={`${settings.width}x${settings.height}-${settings.durationInSeconds}-${settings.fps}-${settings.avatarLimit}`}
                   component={GitHubStarsComposition}
-                  inputProps={props}
-                  durationInFrames={durationInFrames}
-                  fps={fps}
-                  compositionWidth={width}
-                  compositionHeight={height}
+                  inputProps={previewProps}
+                  durationInFrames={previewDurationInFrames}
+                  fps={settings.fps}
+                  compositionWidth={settings.width}
+                  compositionHeight={settings.height}
                   style={{ width: '100%' }}
                   controls
                   loop
@@ -338,10 +452,10 @@ export default function Home() {
                   <p className="export-title">预览满意了吗？</p>
                   <p className="export-copy">视频会在当前设备上编码，不会上传到服务器。</p>
                 </div>
-                <button className="primary-button export-button" type="button" onClick={exportVideo} disabled={busy}>
+                <Button className="primary-button export-button" type="button" onClick={exportVideo} disabled={busy}>
                   <span>{phase === 'rendering' ? `导出中… ${progress}%` : '导出 MP4'}</span>
                   {phase === 'rendering' ? <span className="button-spinner" /> : <ArrowUpRightIcon />}
-                </button>
+                </Button>
               </div>
 
               {phase === 'rendering' && (
@@ -360,10 +474,14 @@ export default function Home() {
                     </p>
                   </div>
                   <video src={videoUrl} controls className="result-video" />
-                  <a className="secondary-button" href={videoUrl} download={`${props.user}-${props.repository}.mp4`}>
+                  <Button
+                    variant="outline"
+                    className="secondary-button"
+                    render={<a href={videoUrl} download={`${props.user}-${props.repository}.mp4`} />}
+                  >
                     下载 MP4
                     <ArrowUpRightIcon />
-                  </a>
+                  </Button>
                 </div>
               )}
             </section>
@@ -373,16 +491,22 @@ export default function Home() {
 
       <footer className="site-footer">
         <span>Made in browser · GitHub Stars Video</span>
-        <a
+        <Button
+          variant="ghost"
+          size="icon-xs"
           className="icon-link"
-          href={CURRENT_REPO_URL}
-          target="_blank"
-          rel="noreferrer"
-          aria-label={`打开 ${CURRENT_REPO_LABEL}`}
-          title={CURRENT_REPO_LABEL}
+          render={
+            <a
+              href={CURRENT_REPO_URL}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={`打开 ${CURRENT_REPO_LABEL}`}
+              title={CURRENT_REPO_LABEL}
+            />
+          }
         >
           <GitHubIcon />
-        </a>
+        </Button>
       </footer>
     </div>
   )

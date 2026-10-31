@@ -174,6 +174,23 @@ a {
   height: 17px;
 }
 
+.ui-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font: inherit;
+  cursor: pointer;
+}
+
+.ui-button:disabled {
+  cursor: not-allowed;
+}
+
+.ui-button-icon-xs {
+  min-width: 28px;
+  min-height: 28px;
+}
+
 .main-content {
   width: 100%;
   max-width: 42rem;
@@ -285,7 +302,8 @@ a {
   height: 16px;
 }
 
-.input-shell input {
+.input-shell input,
+.ui-input {
   width: 100%;
   min-width: 0;
   padding: 9px 0;
@@ -296,7 +314,8 @@ a {
   font-size: 0.875rem;
 }
 
-.input-shell input::placeholder {
+.input-shell input::placeholder,
+.ui-input::placeholder {
   color: var(--faint-foreground);
 }
 
@@ -328,11 +347,49 @@ a {
   cursor: pointer;
 }
 
-.remember-control input {
+.ui-checkbox {
+  display: inline-grid;
   width: 15px;
   height: 15px;
+  flex: none;
+  place-items: center;
   margin: 0;
-  accent-color: var(--accent);
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--accent-contrast);
+  transition: border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
+}
+
+.ui-checkbox[data-checked] {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.ui-checkbox:focus-visible {
+  outline: 2px solid var(--border-strong);
+  outline-offset: 2px;
+}
+
+.ui-checkbox:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.ui-checkbox-indicator {
+  display: grid;
+  place-items: center;
+}
+
+.checkbox-check-icon {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
 }
 
 .form-actions {
@@ -402,6 +459,177 @@ a {
 .error-message p {
   margin: 3px 0 0;
   overflow-wrap: anywhere;
+}
+
+.settings-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.reset-button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted-foreground);
+  transition: color 180ms ease, background 180ms ease, border-color 180ms ease;
+}
+
+.reset-button:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+.reset-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.46;
+}
+
+.reset-button .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+.setting-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+}
+
+.ui-select-trigger {
+  display: inline-flex;
+  min-width: 124px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  outline: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.75rem;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
+}
+
+.ui-select-trigger:hover:not(:disabled),
+.ui-select-trigger[data-popup-open] {
+  border-color: var(--border-strong);
+  background: var(--muted);
+}
+
+.ui-select-trigger:focus-visible {
+  border-color: var(--border-strong);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--border-strong) 22%, transparent);
+}
+
+.ui-select-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.ui-select-icon {
+  display: inline-flex;
+  color: var(--muted-foreground);
+}
+
+.select-chevron,
+.select-check {
+  display: block;
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
+.ui-select-positioner {
+  z-index: 30;
+}
+
+.ui-select-popup {
+  min-width: var(--anchor-width);
+  padding: 5px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+  box-shadow: 0 14px 34px color-mix(in srgb, var(--foreground) 16%, transparent);
+  transform-origin: var(--transform-origin);
+  animation: select-in 140ms ease both;
+}
+
+.ui-select-list {
+  display: grid;
+  gap: 2px;
+  outline: 0;
+}
+
+.ui-select-item {
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 8px;
+  border-radius: 5px;
+  color: var(--foreground);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  outline: 0;
+  cursor: pointer;
+}
+
+.ui-select-item[data-highlighted],
+.ui-select-item:hover {
+  background: var(--muted);
+}
+
+.ui-select-item[data-disabled] {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.ui-select-indicator {
+  display: inline-flex;
+  color: var(--accent);
+}
+
+@keyframes select-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .spec-list {
@@ -625,6 +853,10 @@ a {
 
   .result-heading {
     display: block;
+  }
+
+  .settings-grid {
+    grid-template-columns: 1fr;
   }
 
   .repo-identity {

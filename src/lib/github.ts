@@ -1,4 +1,4 @@
-import type { Props } from '@/video/schema'
+import { DEFAULT_VIDEO_SETTINGS, type Props } from '@/video/schema'
 
 const API = 'https://api.github.com'
 
@@ -130,5 +130,6 @@ export async function fetchRepoData(
     repository: repo,
     stars: info.stargazers_count ?? 0,
     stargazers,
+    videoSettings: DEFAULT_VIDEO_SETTINGS,
   }
 }

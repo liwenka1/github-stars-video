@@ -6,12 +6,12 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from 'remotion'
-import { Props } from './schema'
+import { DEFAULT_VIDEO_SETTINGS, type Props } from './schema'
 
-export const animationDurationInSeconds = 3
-export const width = 1280
-export const height = 720
-export const fps = 60
+export const animationDurationInSeconds = DEFAULT_VIDEO_SETTINGS.durationInSeconds - 1
+export const width = DEFAULT_VIDEO_SETTINGS.width
+export const height = DEFAULT_VIDEO_SETTINGS.height
+export const fps = DEFAULT_VIDEO_SETTINGS.fps
 const stargazerAvatarSize = 128
 const stargazerAvatarGap = 16
 const starSize = 32
@@ -22,7 +22,11 @@ export function GitHubStarsComposition({
   repository,
   stargazers,
   stars,
+  videoSettings,
 }: Props) {
+  const animationSeconds = Math.max(1, videoSettings.durationInSeconds - 1)
+  const visibleStargazers = stargazers.slice(-videoSettings.avatarLimit)
+
   return (
     <AbsoluteFill className="bg-white">
       <RepositoryInformation
@@ -30,8 +34,8 @@ export function GitHubStarsComposition({
         userAvatarUrl={userAvatarUrl}
         repository={repository}
       />
-      <UserAvatars stargazers={stargazers} />
-      <StarCount stars={stars} />
+      <UserAvatars stargazers={visibleStargazers} durationInSeconds={animationSeconds} />
+      <StarCount stars={stars} durationInSeconds={animationSeconds} />
     </AbsoluteFill>
   )
 }
@@ -39,9 +43,11 @@ export function GitHubStarsComposition({
 function StarCount({
   stars,
   startFrom = 0,
+  durationInSeconds,
 }: {
   stars: number
   startFrom?: number
+  durationInSeconds: number
 }) {
   const frame = useCurrentFrame()
   const { fps } = useVideoConfig()
@@ -49,7 +55,7 @@ function StarCount({
   const starsToDisplay = Math.round(
     interpolate(
       frame,
-      [0, animationDurationInSeconds * fps],
+      [0, durationInSeconds * fps],
       [startFrom, stars],
       {
         extrapolateRight: 'clamp',
@@ -68,7 +74,13 @@ function StarCount({
   )
 }
 
-function UserAvatars({ stargazers }: { stargazers: Props['stargazers'] }) {
+function UserAvatars({
+  stargazers,
+  durationInSeconds,
+}: {
+  stargazers: Props['stargazers']
+  durationInSeconds: number
+}) {
   return (
     <div className="relative flex-1">
       {stargazers.map((avatarUrl, index) => (
@@ -77,6 +89,7 @@ function UserAvatars({ stargazers }: { stargazers: Props['stargazers'] }) {
           avatarUrl={avatarUrl}
           index={index}
           stargazers={stargazers}
+          durationInSeconds={durationInSeconds}
         />
       ))}
     </div>
@@ -112,10 +125,12 @@ function User({
   avatarUrl,
   index,
   stargazers,
+  durationInSeconds,
 }: {
   avatarUrl: string
   index: number
   stargazers: Props['stargazers']
+  durationInSeconds: number
 }) {
   const { fps, width } = useVideoConfig()
   const frame = useCurrentFrame()
@@ -123,7 +138,7 @@ function User({
     stargazerAvatarGap + index * (stargazerAvatarSize + stargazerAvatarGap)
   const left = interpolate(
     frame,
-    [0, animationDurationInSeconds * fps],
+    [0, durationInSeconds * fps],
     [
       offset,
       offset -
