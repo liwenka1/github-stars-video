@@ -20,7 +20,7 @@
   --popover-foreground: oklch(0.147 0.004 49.3);
   --accent: oklch(0.96 0.002 17.2);
   --accent-foreground: oklch(0.214 0.009 43.1);
-  --accent-contrast: var(--primary-foreground);
+  --accent-contrast: var(--accent-foreground);
   --destructive: oklch(0.577 0.245 27.325);
   --danger: var(--destructive);
   --input: oklch(0.922 0.005 34.3);
@@ -47,7 +47,7 @@
   --popover-foreground: oklch(0.986 0.002 67.8);
   --accent: oklch(0.268 0.011 36.5);
   --accent-foreground: oklch(0.986 0.002 67.8);
-  --accent-contrast: var(--primary-foreground);
+  --accent-contrast: var(--accent-foreground);
   --destructive: oklch(0.704 0.191 22.216);
   --danger: var(--destructive);
   --input: oklch(1 0 0 / 15%);
@@ -435,9 +435,9 @@ a {
 .primary-button {
   display: inline-flex;
   padding: 0 16px;
-  border: 1px solid var(--accent);
-  background: var(--accent);
-  color: var(--accent-contrast);
+  border: 1px solid var(--primary);
+  background: var(--primary);
+  color: var(--primary-foreground);
 }
 
 .primary-button:hover:not(:disabled) {
@@ -641,7 +641,7 @@ a {
 
 .ui-select-indicator {
   display: inline-flex;
-  color: var(--accent);
+  color: var(--accent-foreground);
 }
 
 @keyframes select-in {
@@ -797,7 +797,7 @@ a {
 .progress-bar {
   height: 100%;
   border-radius: inherit;
-  background: var(--accent);
+  background: var(--primary);
   transition: width 180ms ease;
 }
 
