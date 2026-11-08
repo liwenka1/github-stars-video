@@ -3,32 +3,56 @@
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #292724;
-  --muted: #f3f1ee;
-  --muted-foreground: #817a72;
-  --faint-foreground: #a59e96;
-  --border: #e7e3de;
-  --border-strong: #d2cbc3;
-  --accent: #292724;
-  --accent-contrast: #ffffff;
-  --danger: #a6534c;
-  --shadow: 0 18px 48px rgba(68, 54, 38, 0.06);
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.147 0.004 49.3);
+  --muted: oklch(0.96 0.002 17.2);
+  --muted-foreground: oklch(0.547 0.021 43.1);
+  --faint-foreground: color-mix(in oklch, var(--muted-foreground), var(--background) 36%);
+  --border: oklch(0.922 0.005 34.3);
+  --border-strong: color-mix(in oklch, var(--border), var(--foreground) 14%);
+  --primary: oklch(0.214 0.009 43.1);
+  --primary-foreground: oklch(0.986 0.002 67.8);
+  --secondary: oklch(0.96 0.002 17.2);
+  --secondary-foreground: oklch(0.214 0.009 43.1);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.147 0.004 49.3);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.147 0.004 49.3);
+  --accent: oklch(0.96 0.002 17.2);
+  --accent-foreground: oklch(0.214 0.009 43.1);
+  --accent-contrast: var(--primary-foreground);
+  --destructive: oklch(0.577 0.245 27.325);
+  --danger: var(--destructive);
+  --input: oklch(0.922 0.005 34.3);
+  --ring: oklch(0.714 0.014 41.2);
+  --shadow: 0 18px 48px oklch(0.214 0.009 43.1 / 0.06);
   --radius: 0.625rem;
 }
 
-html[data-theme='dark'] {
-  --background: #252321;
-  --foreground: #f6f1eb;
-  --muted: #36312d;
-  --muted-foreground: #b5aaa0;
-  --faint-foreground: #8f857b;
-  --border: rgba(246, 241, 235, 0.13);
-  --border-strong: rgba(246, 241, 235, 0.26);
-  --accent: #f6f1eb;
-  --accent-contrast: #292724;
-  --danger: #e2a19a;
-  --shadow: 0 18px 48px rgba(0, 0, 0, 0.18);
+.dark {
+  --background: oklch(0.147 0.004 49.3);
+  --foreground: oklch(0.986 0.002 67.8);
+  --muted: oklch(0.268 0.011 36.5);
+  --muted-foreground: oklch(0.714 0.014 41.2);
+  --faint-foreground: color-mix(in oklch, var(--muted-foreground), var(--background) 34%);
+  --border: oklch(1 0 0 / 10%);
+  --border-strong: color-mix(in oklch, var(--border), var(--foreground) 18%);
+  --primary: oklch(0.922 0.005 34.3);
+  --primary-foreground: oklch(0.214 0.009 43.1);
+  --secondary: oklch(0.268 0.011 36.5);
+  --secondary-foreground: oklch(0.986 0.002 67.8);
+  --card: oklch(0.214 0.009 43.1);
+  --card-foreground: oklch(0.986 0.002 67.8);
+  --popover: oklch(0.214 0.009 43.1);
+  --popover-foreground: oklch(0.986 0.002 67.8);
+  --accent: oklch(0.268 0.011 36.5);
+  --accent-foreground: oklch(0.986 0.002 67.8);
+  --accent-contrast: var(--primary-foreground);
+  --destructive: oklch(0.704 0.191 22.216);
+  --danger: var(--destructive);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.547 0.021 43.1);
+  --shadow: 0 18px 48px oklch(0 0 0 / 0.22);
 }
 
 * {
@@ -294,7 +318,7 @@ a {
 
 .input-shell:focus-within {
   border-color: var(--border-strong);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--border-strong) 22%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--border-strong) 22%, transparent);
 }
 
 .input-shell > .icon {
@@ -444,9 +468,9 @@ a {
 .error-message {
   margin-top: 16px;
   padding: 11px 13px;
-  border: 1px solid color-mix(in srgb, var(--danger) 34%, transparent);
+  border: 1px solid color-mix(in oklch, var(--danger) 34%, transparent);
   border-radius: calc(var(--radius) * 0.8);
-  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  background: color-mix(in oklch, var(--danger) 8%, transparent);
   color: var(--danger);
   font-size: 0.75rem;
   line-height: 1.6;
@@ -543,7 +567,7 @@ a {
 
 .ui-select-trigger:focus-visible {
   border-color: var(--border-strong);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--border-strong) 22%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--border-strong) 22%, transparent);
 }
 
 .ui-select-trigger:disabled {
@@ -579,7 +603,7 @@ a {
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--background);
-  box-shadow: 0 14px 34px color-mix(in srgb, var(--foreground) 16%, transparent);
+  box-shadow: 0 14px 34px color-mix(in oklch, var(--foreground) 16%, transparent);
   transform-origin: var(--transform-origin);
   animation: select-in 140ms ease both;
 }

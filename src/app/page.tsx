@@ -120,6 +120,7 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark')
     document.documentElement.dataset.theme = theme
     localStorage.setItem(THEME_KEY, theme)
   }, [theme])
