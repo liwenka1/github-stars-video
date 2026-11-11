@@ -845,6 +845,10 @@ a {
   line-height: 1.6;
 }
 
+.support-warning {
+  color: var(--danger);
+}
+
 .export-button {
   flex: none;
 }

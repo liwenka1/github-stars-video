@@ -192,6 +192,7 @@ export default function Home() {
   const [settings, setSettings] = useState<VideoSettings>(DEFAULT_VIDEO_SETTINGS)
   const [showToken, setShowToken] = useState(false)
   const [storageReady, setStorageReady] = useState(false)
+  const [webCodecsSupported, setWebCodecsSupported] = useState(true)
 
   const loadControllerRef = useRef<AbortController | null>(null)
   const renderControllerRef = useRef<AbortController | null>(null)
@@ -226,6 +227,10 @@ export default function Home() {
     document.documentElement.dataset.theme = theme
     writeStorage(THEME_KEY, theme)
   }, [theme])
+
+  useEffect(() => {
+    setWebCodecsSupported('VideoEncoder' in window)
+  }, [])
 
   useEffect(() => {
     if (!storageReady) return
@@ -315,6 +320,11 @@ export default function Home() {
 
   const exportVideo = async () => {
     if (!ready || phase === 'loading' || phase === 'rendering') return
+    if (!webCodecsSupported) {
+      setRenderError('当前浏览器不支持 WebCodecs，无法在浏览器中导出视频。请使用较新的 Chrome、Firefox 或 Safari。')
+      setPhase('ready')
+      return
+    }
 
     const controller = new AbortController()
     renderControllerRef.current = controller
@@ -652,7 +662,11 @@ export default function Home() {
                   <p className="section-lead">你的星光已经准备好了</p>
                 </div>
                 <div className="repo-identity">
-                  {props.userAvatarUrl ? <img src={props.userAvatarUrl} alt="" /> : <span className="avatar-fallback" />}
+                  {props.userAvatarUrl ? (
+                    <img src={props.userAvatarUrl} alt="" width={26} height={26} />
+                  ) : (
+                    <span className="avatar-fallback" />
+                  )}
                   <span>
                     <b>{props.user}</b>
                     <span>/{props.repository}</span>
@@ -696,16 +710,20 @@ export default function Home() {
               <div className="export-row">
                 <div>
                   <p className="export-title">预览满意了吗？</p>
-                  <p className="export-copy">视频会在当前设备上编码，不会上传到服务器。</p>
+                  <p className={webCodecsSupported ? 'export-copy' : 'export-copy support-warning'}>
+                    {webCodecsSupported
+                      ? '视频会在当前设备上编码，不会上传到服务器。'
+                      : '当前浏览器不支持本地视频编码，请更换浏览器后再导出。'}
+                  </p>
                 </div>
                 <Button
                   className="primary-button export-button"
                   type="button"
                   onClick={phase === 'rendering' ? cancelRender : exportVideo}
-                  disabled={phase === 'loading'}
+                  disabled={phase === 'loading' || !webCodecsSupported}
                   aria-busy={phase === 'rendering'}
                 >
-                  <span>{phase === 'rendering' ? '取消导出' : '导出 MP4'}</span>
+                  <span>{phase === 'rendering' ? '取消导出' : webCodecsSupported ? '导出 MP4' : '浏览器不支持'}</span>
                   {phase === 'rendering' ? <span className="button-spinner" /> : <ArrowUpRightIcon />}
                 </Button>
               </div>
