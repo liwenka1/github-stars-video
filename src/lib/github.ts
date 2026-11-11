@@ -164,15 +164,17 @@ function wait(ms: number, signal?: AbortSignal): Promise<void> {
       reject(abortError('已取消读取。'))
       return
     }
-    const timer = setTimeout(resolve, ms)
+    let timer: ReturnType<typeof setTimeout>
     const onAbort = () => {
       clearTimeout(timer)
+      signal?.removeEventListener('abort', onAbort)
       reject(abortError('已取消读取。'))
     }
+    timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
     signal?.addEventListener('abort', onAbort, { once: true })
-    if (signal) {
-      setTimeout(() => signal.removeEventListener('abort', onAbort), ms)
-    }
   })
 }
 
@@ -223,6 +225,7 @@ async function inlineAll(
     const done = await Promise.all(batch.map((url) => toDataUrl(url, 128, options)))
     result.push(...done.filter((item): item is string => Boolean(item)))
     failed += done.filter((item) => !item).length
+    options.onStep?.(`已处理 ${Math.min(i + batch.length, urls.length)}/${urls.length} 张头像…`)
   }
   return { dataUrls: result, failed }
 }
