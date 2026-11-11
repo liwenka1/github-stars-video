@@ -12,7 +12,10 @@ type SelectProps = {
   onValueChange: (value: string) => void
   disabled?: boolean
   className?: string
+  id?: string
   'aria-label'?: string
+  'aria-labelledby'?: string
+  'aria-describedby'?: string
 }
 
 function ChevronDownIcon() {
@@ -31,7 +34,17 @@ function CheckIcon() {
   )
 }
 
-function Select({ value, options, onValueChange, disabled, className, 'aria-label': ariaLabel }: SelectProps) {
+function Select({
+  value,
+  options,
+  onValueChange,
+  disabled,
+  className,
+  id,
+  'aria-label': ariaLabel,
+  'aria-labelledby': ariaLabelledby,
+  'aria-describedby': ariaDescribedby,
+}: SelectProps) {
   return (
     <SelectPrimitive.Root
       value={value}
@@ -44,7 +57,10 @@ function Select({ value, options, onValueChange, disabled, className, 'aria-labe
       <SelectPrimitive.Trigger
         data-slot="select-trigger"
         className={cn('ui-select-trigger', className)}
+        id={id}
         aria-label={ariaLabel}
+        aria-labelledby={ariaLabelledby}
+        aria-describedby={ariaDescribedby}
       >
         <SelectPrimitive.Value />
         <SelectPrimitive.Icon className="ui-select-icon">
