@@ -468,7 +468,13 @@ export default function Home() {
             <p className="section-label">开始</p>
             <p className="section-lead">从一个仓库开始</p>
 
-            <form id="repository-form" className="form-panel" onSubmit={load} aria-busy={phase === 'loading'}>
+            <form
+              id="repository-form"
+              className="form-panel"
+              onSubmit={load}
+              aria-busy={phase === 'loading'}
+              noValidate
+            >
               <div className="field-group">
                 <label className="field-label" htmlFor="github-token">
                   GitHub token <span>fine-grained</span>
@@ -487,6 +493,10 @@ export default function Home() {
                     }}
                     placeholder="github_pat_... 或 ghp_..."
                     autoComplete="new-password"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    required
                     aria-invalid={Boolean(fieldErrors.token)}
                     aria-describedby={fieldErrors.token ? 'github-token-error github-token-hint' : 'github-token-hint'}
                   />
@@ -524,12 +534,20 @@ export default function Home() {
                     type="text"
                     value={repoInput}
                     onChange={(event) => {
-                      setRepoInput(event.target.value)
+                      const normalized = event.target.value
+                        .replace(/^https?:\/\/(www\.)?github\.com\//i, '')
+                        .replace(/^git@github\.com:/i, '')
+                        .replace(/^github\.com\//i, '')
+                      setRepoInput(normalized)
                       setFieldErrors((current) => ({ ...current, repository: undefined }))
                       setLoadError(null)
                     }}
-                    placeholder={CURRENT_REPO_LABEL}
+                    placeholder="owner/repository"
                     autoComplete="url"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    required
                     aria-invalid={Boolean(fieldErrors.repository)}
                     aria-describedby={fieldErrors.repository ? 'repository-error repository-hint' : 'repository-hint'}
                   />
