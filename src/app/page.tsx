@@ -1,6 +1,6 @@
 'use client'
 
-import { fetchRepoData } from '@/lib/github'
+import { fetchRepoData, parseRepoInput } from '@/lib/github'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -9,11 +9,13 @@ import { GitHubStarsComposition } from '@/video/composition'
 import { DEFAULT_VIDEO_SETTINGS, emptyProps, type Props, type VideoSettings } from '@/video/schema'
 import { Player } from '@remotion/player'
 import { renderMediaOnWeb } from '@remotion/web-renderer'
-import { useEffect, useState, type CSSProperties, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from 'react'
 
 const TOKEN_KEY = 'gsw-token'
 const REPO_KEY = 'gsw-repo'
 const THEME_KEY = 'gsw-theme'
+const SETTINGS_KEY = 'gsw-settings'
+const REMEMBER_KEY = 'gsw-remember-token'
 const CURRENT_REPO_URL = 'https://github.com/liwenka1/github-stars-video'
 const CURRENT_REPO_LABEL = 'liwenka1/github-stars-video'
 
@@ -29,6 +31,68 @@ const AVATAR_OPTIONS = [10, 25, 50]
 
 type Phase = 'idle' | 'loading' | 'ready' | 'rendering' | 'done'
 type Theme = 'light' | 'dark'
+
+type FieldErrors = {
+  token?: string
+  repository?: string
+}
+
+function readStorage(key: string): string | null {
+  try {
+    return localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+function writeStorage(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value)
+  } catch {
+    /* 存储被禁用或空间不足时仍可继续使用应用 */
+  }
+}
+
+function removeStorage(key: string) {
+  try {
+    localStorage.removeItem(key)
+  } catch {
+    /* 存储被禁用时忽略 */
+  }
+}
+
+function loadSavedSettings(): VideoSettings {
+  const raw = readStorage(SETTINGS_KEY)
+  if (!raw) return DEFAULT_VIDEO_SETTINGS
+
+  try {
+    const saved = JSON.parse(raw) as Partial<VideoSettings>
+    const validResolution = RESOLUTION_OPTIONS.some(
+      (option) => option.width === saved.width && option.height === saved.height,
+    )
+    const validDuration = DURATION_OPTIONS.includes(saved.durationInSeconds ?? -1)
+    const validFps = FPS_OPTIONS.includes(saved.fps ?? -1)
+    const validAvatarLimit = AVATAR_OPTIONS.includes(saved.avatarLimit ?? -1)
+
+    return {
+      width: validResolution ? Number(saved.width) : DEFAULT_VIDEO_SETTINGS.width,
+      height: validResolution ? Number(saved.height) : DEFAULT_VIDEO_SETTINGS.height,
+      durationInSeconds: validDuration ? Number(saved.durationInSeconds) : DEFAULT_VIDEO_SETTINGS.durationInSeconds,
+      fps: validFps ? Number(saved.fps) : DEFAULT_VIDEO_SETTINGS.fps,
+      avatarLimit: validAvatarLimit ? Number(saved.avatarLimit) : DEFAULT_VIDEO_SETTINGS.avatarLimit,
+    }
+  } catch {
+    return DEFAULT_VIDEO_SETTINGS
+  }
+}
+
+function isAbortError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.name === 'AbortError' ||
+      (error.name === 'GithubError' && (error as Error & { code?: string }).code === 'aborted'))
+  )
+}
 
 function ArrowUpRightIcon() {
   return (
@@ -51,6 +115,25 @@ function LockIcon() {
     <svg viewBox="0 0 24 24" aria-hidden="true" className="icon">
       <rect x="5" y="10" width="14" height="10" rx="2" />
       <path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v2" />
+    </svg>
+  )
+}
+
+function EyeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="icon">
+      <path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6-9.5-6Z" />
+      <circle cx="12" cy="12" r="2.5" />
+    </svg>
+  )
+}
+
+function EyeOffIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="icon">
+      <path d="m3 3 18 18" />
+      <path d="M10.6 6.2A9.9 9.9 0 0 1 12 6c6.1 0 9.5 6 9.5 6a16.3 16.3 0 0 1-3 3.7M6.7 6.8C4.1 8.1 2.5 12 2.5 12s3.4 6 9.5 6c1 0 1.9-.2 2.7-.5" />
+      <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
     </svg>
   )
 }
@@ -97,65 +180,148 @@ export default function Home() {
 
   const [phase, setPhase] = useState<Phase>('idle')
   const [step, setStep] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [renderError, setRenderError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [progress, setProgress] = useState(0)
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
   const [renderSeconds, setRenderSeconds] = useState<number | null>(null)
-  const [theme, setTheme] = useState<Theme>('light')
+  const [theme, setTheme] = useState<Theme>(() =>
+    typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light',
+  )
   const [settings, setSettings] = useState<VideoSettings>(DEFAULT_VIDEO_SETTINGS)
+  const [showToken, setShowToken] = useState(false)
+  const [storageReady, setStorageReady] = useState(false)
+
+  const loadControllerRef = useRef<AbortController | null>(null)
+  const renderControllerRef = useRef<AbortController | null>(null)
+  const videoUrlRef = useRef<string | null>(null)
+  const downloadRef = useRef<HTMLDivElement>(null)
+
+  const setVideoObjectUrl = (nextUrl: string | null) => {
+    const currentUrl = videoUrlRef.current
+    if (currentUrl && currentUrl !== nextUrl) URL.revokeObjectURL(currentUrl)
+    videoUrlRef.current = nextUrl
+    setVideoUrl(nextUrl)
+  }
 
   useEffect(() => {
-    setToken(localStorage.getItem(TOKEN_KEY) ?? '')
-    setRepoInput(localStorage.getItem(REPO_KEY) ?? '')
+    const shouldRemember = readStorage(REMEMBER_KEY) !== 'false'
+    setRemember(shouldRemember)
+    setToken(shouldRemember ? readStorage(TOKEN_KEY) ?? '' : '')
+    setRepoInput(readStorage(REPO_KEY) ?? '')
+    setSettings(loadSavedSettings())
 
-    const savedTheme = localStorage.getItem(THEME_KEY)
+    const savedTheme = readStorage(THEME_KEY)
     if (savedTheme === 'dark' || savedTheme === 'light') {
       setTheme(savedTheme)
-      return
-    }
-
-    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
       setTheme('dark')
     }
+    setStorageReady(true)
   }, [])
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
     document.documentElement.dataset.theme = theme
-    localStorage.setItem(THEME_KEY, theme)
+    writeStorage(THEME_KEY, theme)
   }, [theme])
+
+  useEffect(() => {
+    if (!storageReady) return
+    writeStorage(REPO_KEY, repoInput)
+  }, [repoInput, storageReady])
+
+  useEffect(() => {
+    if (!storageReady) return
+    writeStorage(SETTINGS_KEY, JSON.stringify(settings))
+  }, [settings, storageReady])
+
+  useEffect(() => {
+    if (!storageReady) return
+    writeStorage(REMEMBER_KEY, String(remember))
+    if (!remember) removeStorage(TOKEN_KEY)
+  }, [remember, storageReady])
+
+  useEffect(() => {
+    return () => {
+      loadControllerRef.current?.abort()
+      renderControllerRef.current?.abort()
+      if (videoUrlRef.current) URL.revokeObjectURL(videoUrlRef.current)
+    }
+  }, [])
 
   const load = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (phase === 'loading' || phase === 'rendering') return
+
+    const nextFieldErrors: FieldErrors = {}
+    if (!token.trim()) nextFieldErrors.token = '请输入 GitHub token。'
+    if (!repoInput.trim()) {
+      nextFieldErrors.repository = '请输入仓库路径，例如 liwenka1/next-web-nav。'
+    } else {
+      try {
+        parseRepoInput(repoInput)
+      } catch (err) {
+        nextFieldErrors.repository = err instanceof Error ? err.message : '仓库路径格式不正确。'
+      }
+    }
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setFieldErrors(nextFieldErrors)
+      return
+    }
+
+    loadControllerRef.current?.abort()
+    const controller = new AbortController()
+    loadControllerRef.current = controller
+    const hadExistingData = Boolean(props.user && props.repository)
+
     setPhase('loading')
-    setError(null)
-    setVideoUrl(null)
+    setLoadError(null)
+    setRenderError(null)
+    setFieldErrors({})
+    setVideoObjectUrl(null)
     setRenderSeconds(null)
-    setProps(emptyProps)
+    setStep('准备读取…')
 
     try {
-      const data = await fetchRepoData(repoInput, token, setStep)
+      const data = await fetchRepoData(repoInput.trim(), token, setStep, { signal: controller.signal })
+      if (controller.signal.aborted) {
+        setPhase(hadExistingData ? 'ready' : 'idle')
+        return
+      }
       setProps({ ...data, videoSettings: settings })
       setPhase('ready')
       if (remember) {
-        localStorage.setItem(TOKEN_KEY, token)
+        writeStorage(TOKEN_KEY, token)
       } else {
-        localStorage.removeItem(TOKEN_KEY)
+        removeStorage(TOKEN_KEY)
       }
-      localStorage.setItem(REPO_KEY, repoInput)
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-      setPhase('idle')
+      if (!isAbortError(err)) {
+        setLoadError(err instanceof Error ? err.message : String(err))
+      }
+      setPhase(hadExistingData ? 'ready' : 'idle')
     } finally {
+      if (loadControllerRef.current === controller) loadControllerRef.current = null
       setStep('')
     }
   }
 
+  const cancelLoad = () => {
+    loadControllerRef.current?.abort()
+    setStep('')
+  }
+
   const exportVideo = async () => {
+    if (!ready || phase === 'loading' || phase === 'rendering') return
+
+    const controller = new AbortController()
+    renderControllerRef.current = controller
     setPhase('rendering')
-    setError(null)
+    setRenderError(null)
     setProgress(0)
-    setVideoUrl(null)
+    setVideoObjectUrl(null)
     const startedAt = Date.now()
     const durationInFrames = Math.max(1, Math.round(settings.durationInSeconds * settings.fps))
     const renderProps = {
@@ -177,16 +343,29 @@ export default function Home() {
           defaultProps: renderProps,
         },
         inputProps: renderProps,
+        signal: controller.signal,
         onProgress: (value) => setProgress(Math.round(value.progress * 100)),
       })
       const blob = await getBlob()
+      if (controller.signal.aborted) {
+        setPhase('ready')
+        return
+      }
       setRenderSeconds(Math.round((Date.now() - startedAt) / 1000))
-      setVideoUrl(URL.createObjectURL(blob))
+      setVideoObjectUrl(URL.createObjectURL(blob))
       setPhase('done')
     } catch (err) {
-      setError(err instanceof Error ? `${err.name}: ${err.message}` : String(err))
+      if (!isAbortError(err)) {
+        setRenderError(err instanceof Error ? `${err.name}: ${err.message}` : String(err))
+      }
       setPhase('ready')
+    } finally {
+      if (renderControllerRef.current === controller) renderControllerRef.current = null
     }
+  }
+
+  const cancelRender = () => {
+    renderControllerRef.current?.abort()
   }
 
   const busy = phase === 'loading' || phase === 'rendering'
@@ -203,15 +382,20 @@ export default function Home() {
 
   const updateSettings = (updates: Partial<VideoSettings>) => {
     setSettings((current) => ({ ...current, ...updates }))
-    setVideoUrl((current) => {
-      if (current) URL.revokeObjectURL(current)
-      return null
-    })
+    setVideoObjectUrl(null)
     setRenderSeconds(null)
+    setRenderError(null)
     setPhase((current) => (current === 'done' ? 'ready' : current))
   }
 
   const resetSettings = () => updateSettings(DEFAULT_VIDEO_SETTINGS)
+
+  useEffect(() => {
+    if (phase !== 'done' || !videoUrl) return
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    downloadRef.current?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'nearest' })
+    downloadRef.current?.focus({ preventScroll: true })
+  }, [phase, videoUrl])
 
   return (
     <div className="site-shell">
@@ -243,6 +427,7 @@ export default function Home() {
             variant="ghost"
             size="icon-xs"
             className="theme-toggle"
+            suppressHydrationWarning
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             aria-label={`切换到${themeLabel}模式`}
             title={`切换到${themeLabel}模式`}
@@ -267,7 +452,7 @@ export default function Home() {
             <p className="section-label">开始</p>
             <p className="section-lead">从一个仓库开始</p>
 
-            <form className="form-panel" onSubmit={load}>
+            <form className="form-panel" onSubmit={load} aria-busy={phase === 'loading'}>
               <div className="field-group">
                 <label className="field-label" htmlFor="github-token">
                   GitHub token <span>fine-grained</span>
@@ -276,15 +461,37 @@ export default function Home() {
                   <LockIcon />
                   <Input
                     id="github-token"
-                    type="password"
+                    type={showToken ? 'text' : 'password'}
                     value={token}
-                    onChange={(event) => setToken(event.target.value)}
+                    onChange={(event) => {
+                      setToken(event.target.value)
+                      setFieldErrors((current) => ({ ...current, token: undefined }))
+                      setLoadError(null)
+                    }}
                     placeholder="github_pat_... 或 ghp_..."
-                    autoComplete="off"
+                    autoComplete="new-password"
+                    aria-invalid={Boolean(fieldErrors.token)}
+                    aria-describedby={fieldErrors.token ? 'github-token-error github-token-hint' : 'github-token-hint'}
                   />
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    className="input-action"
+                    type="button"
+                    onClick={() => setShowToken((current) => !current)}
+                    aria-label={showToken ? '隐藏 token' : '显示 token'}
+                    title={showToken ? '隐藏 token' : '显示 token'}
+                  >
+                    {showToken ? <EyeOffIcon /> : <EyeIcon />}
+                  </Button>
                 </div>
-                <p className="field-hint">
-                  需要 <b>Contents: Read and write</b> 权限，token 只会保存在你的浏览器里。
+                {fieldErrors.token && (
+                  <p className="field-error" id="github-token-error">
+                    {fieldErrors.token}
+                  </p>
+                )}
+                <p className="field-hint" id="github-token-hint">
+                  需要 <b>Contents: Read and write</b> 权限；勾选记住后会以明文保存在此浏览器。
                 </p>
               </div>
 
@@ -298,11 +505,22 @@ export default function Home() {
                     id="repository"
                     type="text"
                     value={repoInput}
-                    onChange={(event) => setRepoInput(event.target.value)}
+                    onChange={(event) => {
+                      setRepoInput(event.target.value)
+                      setFieldErrors((current) => ({ ...current, repository: undefined }))
+                      setLoadError(null)
+                    }}
                     placeholder={CURRENT_REPO_LABEL}
                     autoComplete="url"
+                    aria-invalid={Boolean(fieldErrors.repository)}
+                    aria-describedby={fieldErrors.repository ? 'repository-error' : undefined}
                   />
                 </div>
+                {fieldErrors.repository && (
+                  <p className="field-error" id="repository-error">
+                    {fieldErrors.repository}
+                  </p>
+                )}
               </div>
 
               <label className="remember-control">
@@ -311,16 +529,27 @@ export default function Home() {
               </label>
 
               <div className="form-actions">
-                <Button className="primary-button" type="submit" disabled={busy || !repoInput.trim()}>
-                  <span>{phase === 'loading' ? step || '正在读取…' : '读取仓库数据'}</span>
+                <Button
+                  className="primary-button"
+                  type={phase === 'loading' ? 'button' : 'submit'}
+                  onClick={phase === 'loading' ? cancelLoad : undefined}
+                  disabled={phase === 'rendering'}
+                  aria-busy={phase === 'loading'}
+                >
+                  <span>{phase === 'loading' ? '取消读取' : '读取仓库数据'}</span>
                   {phase === 'loading' ? <span className="button-spinner" /> : <ArrowUpRightIcon />}
                 </Button>
+                {phase === 'loading' && (
+                  <p className="operation-status" role="status" aria-live="polite">
+                    {step || '正在读取…'}
+                  </p>
+                )}
               </div>
 
-              {error && (
+              {loadError && (
                 <div className="error-message" role="alert">
                   <span>读取失败</span>
-                  <p>{error}</p>
+                  <p>{loadError}</p>
                 </div>
               )}
             </form>
@@ -347,9 +576,10 @@ export default function Home() {
             </div>
 
             <div className="settings-grid">
-              <label className="setting-field">
-                <span>画布</span>
+              <label className="setting-field" htmlFor="setting-canvas">
+                <span id="setting-canvas-label">画布</span>
                 <Select
+                  id="setting-canvas"
                   value={`${settings.width}x${settings.height}`}
                   options={RESOLUTION_OPTIONS.map((option) => ({
                     label: option.label,
@@ -360,13 +590,14 @@ export default function Home() {
                     if (option) updateSettings({ width: option.width, height: option.height })
                   }}
                   disabled={busy}
-                  aria-label="画布尺寸"
+                  aria-labelledby="setting-canvas-label"
                 />
               </label>
 
-              <label className="setting-field">
-                <span>时长</span>
+              <label className="setting-field" htmlFor="setting-duration">
+                <span id="setting-duration-label">时长</span>
                 <Select
+                  id="setting-duration"
                   value={String(settings.durationInSeconds)}
                   options={DURATION_OPTIONS.map((seconds) => ({
                     label: `约 ${seconds} 秒`,
@@ -374,29 +605,31 @@ export default function Home() {
                   }))}
                   onValueChange={(value) => updateSettings({ durationInSeconds: Number(value) })}
                   disabled={busy}
-                  aria-label="视频时长"
+                  aria-labelledby="setting-duration-label"
                 />
               </label>
 
-              <label className="setting-field">
-                <span>帧率</span>
+              <label className="setting-field" htmlFor="setting-fps">
+                <span id="setting-fps-label">帧率</span>
                 <Select
+                  id="setting-fps"
                   value={String(settings.fps)}
                   options={FPS_OPTIONS.map((value) => ({ label: `${value} FPS`, value: String(value) }))}
                   onValueChange={(value) => updateSettings({ fps: Number(value) })}
                   disabled={busy}
-                  aria-label="视频帧率"
+                  aria-labelledby="setting-fps-label"
                 />
               </label>
 
-              <label className="setting-field">
-                <span>头像数量</span>
+              <label className="setting-field" htmlFor="setting-avatars">
+                <span id="setting-avatars-label">头像数量</span>
                 <Select
+                  id="setting-avatars"
                   value={String(settings.avatarLimit)}
                   options={AVATAR_OPTIONS.map((value) => ({ label: `最近 ${value} 位`, value: String(value) }))}
                   onValueChange={(value) => updateSettings({ avatarLimit: Number(value) })}
                   disabled={busy}
-                  aria-label="头像数量"
+                  aria-labelledby="setting-avatars-label"
                 />
               </label>
             </div>
@@ -408,7 +641,11 @@ export default function Home() {
           </section>
 
           {ready && (
-            <section className="content-block result-section enter" style={{ '--delay': '90ms' } as CSSProperties}>
+            <section
+              className="content-block result-section enter"
+              style={{ '--delay': '90ms' } as CSSProperties}
+              aria-busy={phase === 'loading'}
+            >
               <div className="result-heading">
                 <div>
                   <p className="section-label">预览</p>
@@ -423,15 +660,23 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="stats-row" aria-label="仓库统计">
+              <div className="stats-row" role="group" aria-label="仓库统计">
                 <span>
                   <strong>{props.stars.toLocaleString('en-US')}</strong> stars
                 </span>
                 <span>
-                  <strong>{previewProps.stargazers.length}</strong> 个头像
+                  <strong>{props.avatarStats ? `${props.avatarStats.loaded}/${props.avatarStats.requested}` : previewProps.stargazers.length}</strong>{' '}
+                  个头像
                 </span>
+                {props.avatarStats?.failed ? <span className="stats-warning">有 {props.avatarStats.failed} 个头像下载失败</span> : null}
                 <span>浏览器端渲染</span>
               </div>
+
+              {phase === 'loading' && (
+                <p className="operation-status result-operation-status" role="status" aria-live="polite">
+                  {step || '正在读取新仓库…'}
+                </p>
+              )}
 
               <div className="player-frame">
                 <Player
@@ -453,20 +698,43 @@ export default function Home() {
                   <p className="export-title">预览满意了吗？</p>
                   <p className="export-copy">视频会在当前设备上编码，不会上传到服务器。</p>
                 </div>
-                <Button className="primary-button export-button" type="button" onClick={exportVideo} disabled={busy}>
-                  <span>{phase === 'rendering' ? `导出中… ${progress}%` : '导出 MP4'}</span>
+                <Button
+                  className="primary-button export-button"
+                  type="button"
+                  onClick={phase === 'rendering' ? cancelRender : exportVideo}
+                  disabled={phase === 'loading'}
+                  aria-busy={phase === 'rendering'}
+                >
+                  <span>{phase === 'rendering' ? '取消导出' : '导出 MP4'}</span>
                   {phase === 'rendering' ? <span className="button-spinner" /> : <ArrowUpRightIcon />}
                 </Button>
               </div>
 
               {phase === 'rendering' && (
-                <div className="progress-track" aria-label={`导出进度 ${progress}%`}>
+                <div
+                  className="progress-track"
+                  role="progressbar"
+                  aria-label="导出进度"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={progress}
+                >
                   <div className="progress-bar" style={{ width: `${progress}%` }} />
                 </div>
               )}
 
+              {renderError && (
+                <div className="error-message render-error" role="alert">
+                  <span>导出失败</span>
+                  <p>{renderError}</p>
+                  <Button variant="outline" type="button" className="error-action" onClick={exportVideo}>
+                    重新导出
+                  </Button>
+                </div>
+              )}
+
               {videoUrl && (
-                <div className="download-panel">
+                <div className="download-panel" ref={downloadRef} tabIndex={-1} aria-live="polite">
                   <div>
                     <p className="section-label">完成</p>
                     <p className="section-lead">视频已经准备好了</p>

@@ -23,6 +23,13 @@ export type Props = {
   stars: number
   /** 最近点赞者的头像，data URL 数组 */
   stargazers: string[]
+  /** 头像内联结果，读取失败时用于给出可操作的反馈 */
+  avatarStats?: {
+    requested: number
+    loaded: number
+    failed: number
+    ownerLoaded: boolean
+  }
   /** 当前视频的输出设定 */
   videoSettings: VideoSettings
 }
