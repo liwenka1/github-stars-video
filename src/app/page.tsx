@@ -674,6 +674,8 @@ export default function Home() {
                 </div>
                 <div className="repo-identity">
                   {props.userAvatarUrl ? (
+                    // 头像已经是内联 data URL，Next Image 优化无法减少请求或体积。
+                    // eslint-disable-next-line @next/next/no-img-element
                     <img src={props.userAvatarUrl} alt="" width={26} height={26} />
                   ) : (
                     <span className="avatar-fallback" />
