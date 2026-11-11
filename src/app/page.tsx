@@ -174,7 +174,7 @@ function MarkIcon() {
 
 export default function Home() {
   const [token, setToken] = useState('')
-  const [remember, setRemember] = useState(true)
+  const [remember, setRemember] = useState(false)
   const [repoInput, setRepoInput] = useState('')
   const [props, setProps] = useState<Props>(emptyProps)
 
@@ -198,6 +198,8 @@ export default function Home() {
   const renderControllerRef = useRef<AbortController | null>(null)
   const videoUrlRef = useRef<string | null>(null)
   const downloadRef = useRef<HTMLDivElement>(null)
+  const tokenInputRef = useRef<HTMLInputElement>(null)
+  const repoInputRef = useRef<HTMLInputElement>(null)
 
   const setVideoObjectUrl = (nextUrl: string | null) => {
     const currentUrl = videoUrlRef.current
@@ -207,9 +209,11 @@ export default function Home() {
   }
 
   useEffect(() => {
-    const shouldRemember = readStorage(REMEMBER_KEY) !== 'false'
+    const savedRemember = readStorage(REMEMBER_KEY)
+    const savedToken = readStorage(TOKEN_KEY)
+    const shouldRemember = savedRemember === 'true' || (savedRemember === null && Boolean(savedToken))
     setRemember(shouldRemember)
-    setToken(shouldRemember ? readStorage(TOKEN_KEY) ?? '' : '')
+    setToken(shouldRemember ? savedToken ?? '' : '')
     setRepoInput(readStorage(REPO_KEY) ?? '')
     setSettings(loadSavedSettings())
 
@@ -273,6 +277,8 @@ export default function Home() {
     }
     if (Object.keys(nextFieldErrors).length > 0) {
       setFieldErrors(nextFieldErrors)
+      if (nextFieldErrors.token) tokenInputRef.current?.focus()
+      else if (nextFieldErrors.repository) repoInputRef.current?.focus()
       return
     }
 
@@ -462,14 +468,15 @@ export default function Home() {
             <p className="section-label">开始</p>
             <p className="section-lead">从一个仓库开始</p>
 
-            <form className="form-panel" onSubmit={load} aria-busy={phase === 'loading'}>
+            <form id="repository-form" className="form-panel" onSubmit={load} aria-busy={phase === 'loading'}>
               <div className="field-group">
                 <label className="field-label" htmlFor="github-token">
                   GitHub token <span>fine-grained</span>
                 </label>
-                <div className="input-shell">
+                <div className="input-shell" data-invalid={Boolean(fieldErrors.token)}>
                   <LockIcon />
                   <Input
+                    ref={tokenInputRef}
                     id="github-token"
                     type={showToken ? 'text' : 'password'}
                     value={token}
@@ -509,9 +516,10 @@ export default function Home() {
                 <label className="field-label" htmlFor="repository">
                   仓库路径 <span>owner / repository</span>
                 </label>
-                <div className="input-shell">
+                <div className="input-shell" data-invalid={Boolean(fieldErrors.repository)}>
                   <span className="input-prefix">github.com/</span>
                   <Input
+                    ref={repoInputRef}
                     id="repository"
                     type="text"
                     value={repoInput}
@@ -523,7 +531,7 @@ export default function Home() {
                     placeholder={CURRENT_REPO_LABEL}
                     autoComplete="url"
                     aria-invalid={Boolean(fieldErrors.repository)}
-                    aria-describedby={fieldErrors.repository ? 'repository-error' : undefined}
+                    aria-describedby={fieldErrors.repository ? 'repository-error repository-hint' : 'repository-hint'}
                   />
                 </div>
                 {fieldErrors.repository && (
@@ -531,6 +539,9 @@ export default function Home() {
                     {fieldErrors.repository}
                   </p>
                 )}
+                <p className="field-hint" id="repository-hint">
+                  支持 owner/repo 或完整的 GitHub 仓库 URL。
+                </p>
               </div>
 
               <label className="remember-control">
@@ -682,7 +693,14 @@ export default function Home() {
                   <strong>{props.avatarStats ? `${props.avatarStats.loaded}/${props.avatarStats.requested}` : previewProps.stargazers.length}</strong>{' '}
                   个头像
                 </span>
-                {props.avatarStats?.failed ? <span className="stats-warning">有 {props.avatarStats.failed} 个头像下载失败</span> : null}
+                {props.avatarStats?.failed ? (
+                  <span className="stats-warning">
+                    有 {props.avatarStats.failed} 个头像下载失败，
+                    <button type="submit" form="repository-form" className="inline-action">
+                      重新读取
+                    </button>
+                  </span>
+                ) : null}
                 <span>浏览器端渲染</span>
               </div>
 
@@ -757,7 +775,7 @@ export default function Home() {
                     <p className="section-label">完成</p>
                     <p className="section-lead">视频已经准备好了</p>
                     <p className="download-copy">
-                      {renderSeconds ? `本次渲染用了 ${renderSeconds} 秒。` : '可以先预览，再保存到本地。'}
+                      {renderSeconds !== null ? `本次渲染用了 ${renderSeconds} 秒。` : '可以先预览，再保存到本地。'}
                     </p>
                   </div>
                   <video src={videoUrl} controls className="result-video" />
