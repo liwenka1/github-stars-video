@@ -685,7 +685,7 @@ export default function Home() {
                   <p className="section-label">预览</p>
                   <p className="section-lead">你的星光已经准备好了</p>
                 </div>
-                <div className="repo-identity">
+                <div className="repo-identity" title={`${props.user}/${props.repository}`}>
                   {props.userAvatarUrl ? (
                     // 头像已经是内联 data URL，Next Image 优化无法减少请求或体积。
                     // eslint-disable-next-line @next/next/no-img-element
@@ -705,13 +705,17 @@ export default function Home() {
                   <strong>{props.stars.toLocaleString('en-US')}</strong> stars
                 </span>
                 <span>
-                  <strong>{props.avatarStats ? `${props.avatarStats.loaded}/${props.avatarStats.requested}` : previewProps.stargazers.length}</strong>{' '}
-                  个头像
+                  视频使用 <strong>{previewProps.stargazers.length}</strong> 个头像
                 </span>
+                {props.avatarStats && (
+                  <span>
+                    已获取 <strong>{props.avatarStats.loaded}/{props.avatarStats.requested}</strong> 个头像
+                  </span>
+                )}
                 {props.avatarStats?.failed ? (
                   <span className="stats-warning">
                     有 {props.avatarStats.failed} 个头像下载失败，
-                    <button type="submit" form="repository-form" className="inline-action">
+                    <button type="submit" form="repository-form" className="inline-action" disabled={busy}>
                       重新读取
                     </button>
                   </span>
@@ -719,25 +723,36 @@ export default function Home() {
                 <span>浏览器端渲染</span>
               </div>
 
+              {props.avatarStats && !props.avatarStats.ownerLoaded && (
+                <p className="operation-status result-operation-status" role="status">
+                  仓库头像未能下载，视频会使用首字母占位图。
+                </p>
+              )}
+
               {phase === 'loading' && (
                 <p className="operation-status result-operation-status" role="status" aria-live="polite">
                   {step || '正在读取新仓库…'}
                 </p>
               )}
 
-              <div className="player-frame">
-                <Player
-                  key={`${settings.width}x${settings.height}-${settings.durationInSeconds}-${settings.fps}-${settings.avatarLimit}`}
-                  component={GitHubStarsComposition}
-                  inputProps={previewProps}
-                  durationInFrames={previewDurationInFrames}
-                  fps={settings.fps}
-                  compositionWidth={settings.width}
-                  compositionHeight={settings.height}
-                  style={{ width: '100%' }}
-                  controls
-                  loop
-                />
+              <div
+                className="player-frame"
+                style={{ '--preview-ratio': settings.width / settings.height } as CSSProperties}
+              >
+                <div className="player-stage">
+                  <Player
+                    key={`${settings.width}x${settings.height}-${settings.durationInSeconds}-${settings.fps}-${settings.avatarLimit}`}
+                    component={GitHubStarsComposition}
+                    inputProps={previewProps}
+                    durationInFrames={previewDurationInFrames}
+                    fps={settings.fps}
+                    compositionWidth={settings.width}
+                    compositionHeight={settings.height}
+                    style={{ width: '100%' }}
+                    controls
+                    loop
+                  />
+                </div>
               </div>
 
               <div className="export-row">

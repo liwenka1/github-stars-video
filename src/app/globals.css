@@ -774,11 +774,18 @@ a {
 }
 
 .repo-identity {
+  min-width: 0;
   max-width: 100%;
   gap: 8px;
   color: var(--muted-foreground);
   font-size: 0.8125rem;
   white-space: nowrap;
+}
+
+.repo-identity > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .repo-identity img,
@@ -829,11 +836,18 @@ a {
   cursor: pointer;
 }
 
-.inline-action:hover {
+.inline-action:hover:not(:disabled) {
   color: var(--foreground);
 }
 
+.inline-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .player-frame {
+  display: flex;
+  justify-content: center;
   margin-top: 17px;
   padding: 6px;
   overflow: hidden;
@@ -843,7 +857,9 @@ a {
   box-shadow: var(--shadow);
 }
 
-.player-frame > div {
+.player-stage {
+  width: min(100%, calc(70vh * var(--preview-ratio)));
+  width: min(100%, calc(70svh * var(--preview-ratio)));
   overflow: hidden;
   border-radius: calc(var(--radius) * 0.7);
 }
@@ -910,6 +926,9 @@ a {
 .result-video {
   display: block;
   width: 100%;
+  max-height: 70vh;
+  max-height: 70svh;
+  object-fit: contain;
   border-radius: calc(var(--radius) * 0.8);
   background: #111;
 }
