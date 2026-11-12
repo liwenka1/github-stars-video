@@ -186,9 +186,7 @@ export default function Home() {
   const [progress, setProgress] = useState(0)
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
   const [renderSeconds, setRenderSeconds] = useState<number | null>(null)
-  const [theme, setTheme] = useState<Theme>(() =>
-    typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light',
-  )
+  const [theme, setTheme] = useState<Theme>('light')
   const [settings, setSettings] = useState<VideoSettings>(DEFAULT_VIDEO_SETTINGS)
   const [showToken, setShowToken] = useState(false)
   const [storageReady, setStorageReady] = useState(false)
@@ -227,10 +225,11 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
+    if (!storageReady) return
     document.documentElement.classList.toggle('dark', theme === 'dark')
     document.documentElement.dataset.theme = theme
     writeStorage(THEME_KEY, theme)
-  }, [theme])
+  }, [theme, storageReady])
 
   useEffect(() => {
     setWebCodecsSupported('VideoEncoder' in window)
@@ -249,8 +248,9 @@ export default function Home() {
   useEffect(() => {
     if (!storageReady) return
     writeStorage(REMEMBER_KEY, String(remember))
-    if (!remember) removeStorage(TOKEN_KEY)
-  }, [remember, storageReady])
+    if (remember && token.trim()) writeStorage(TOKEN_KEY, token.trim())
+    else removeStorage(TOKEN_KEY)
+  }, [remember, token, storageReady])
 
   useEffect(() => {
     return () => {
@@ -303,13 +303,8 @@ export default function Home() {
       }
       setProps({ ...data, videoSettings: settings })
       setPhase('ready')
-      if (remember) {
-        writeStorage(TOKEN_KEY, token)
-      } else {
-        removeStorage(TOKEN_KEY)
-      }
     } catch (err) {
-      if (!isAbortError(err)) {
+      if (!controller.signal.aborted && !isAbortError(err)) {
         setLoadError(err instanceof Error ? err.message : String(err))
       }
       setPhase(hadExistingData ? 'ready' : 'idle')
@@ -371,7 +366,7 @@ export default function Home() {
       setVideoObjectUrl(URL.createObjectURL(blob))
       setPhase('done')
     } catch (err) {
-      if (!isAbortError(err)) {
+      if (!controller.signal.aborted && !isAbortError(err)) {
         setRenderError(err instanceof Error ? `${err.name}: ${err.message}` : String(err))
       }
       setPhase('ready')

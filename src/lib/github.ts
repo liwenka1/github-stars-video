@@ -67,12 +67,13 @@ function timeoutError(): GithubError {
   return new GithubError('timeout', 'GitHub 请求超时，请检查网络后重试。')
 }
 
-async function fetchWithTimeout(
+async function fetchWithTimeout<T>(
   input: RequestInfo | URL,
   init: RequestInit,
   timeoutMs: number,
-  signal?: AbortSignal,
-): Promise<Response> {
+  signal: AbortSignal | undefined,
+  consume: (response: Response, signal: AbortSignal) => Promise<T>,
+): Promise<T> {
   if (signal?.aborted) throw abortError('已取消读取。')
   const controller = new AbortController()
   let timedOut = false
@@ -84,8 +85,21 @@ async function fetchWithTimeout(
   const onAbort = () => controller.abort()
   signal?.addEventListener('abort', onAbort, { once: true })
 
+  // Keep the timeout and cancellation linked until the body and any FileReader work finish.
+  let rejectOnAbort: (() => void) | undefined
+  const cancelled = new Promise<never>((_, reject) => {
+    rejectOnAbort = () => reject(timedOut ? timeoutError() : abortError('已取消读取。'))
+    controller.signal.addEventListener('abort', rejectOnAbort, { once: true })
+  })
+
   try {
-    return await fetch(input, { ...init, signal: controller.signal })
+    return await Promise.race([
+      (async () => {
+        const response = await fetch(input, { ...init, signal: controller.signal })
+        return consume(response, controller.signal)
+      })(),
+      cancelled,
+    ])
   } catch (error) {
     if (signal?.aborted) throw abortError('已取消读取。')
     if (timedOut) throw timeoutError()
@@ -94,6 +108,7 @@ async function fetchWithTimeout(
   } finally {
     clearTimeout(timer)
     signal?.removeEventListener('abort', onAbort)
+    if (rejectOnAbort) controller.signal.removeEventListener('abort', rejectOnAbort)
   }
 }
 
@@ -120,34 +135,37 @@ function errorMessageForResponse(code: GithubErrorCode, status: number, message:
   }
 }
 
-async function gh(
+async function gh<T>(
   path: string,
   token: string,
   options: Pick<FetchRepoDataOptions, 'signal' | 'timeoutMs'> = {},
-): Promise<Response> {
+): Promise<{ data: T; headers: Headers }> {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
-  const res = await fetchWithTimeout(
+  return fetchWithTimeout(
     `${API}${path}`,
     { headers: authHeaders(token) },
     timeoutMs,
     options.signal,
+    async (res) => {
+      const text = await res.text()
+      if (!res.ok) {
+        let message = res.statusText
+        try {
+          const body = JSON.parse(text) as { message?: string }
+          if (body?.message) message = body.message
+        } catch {
+          /* 响应不是 JSON */
+        }
+        const code = errorCodeForResponse(res.status, message, res.headers.get('x-ratelimit-remaining'))
+        const retryAfter = Number(res.headers.get('retry-after'))
+        throw new GithubError(code, errorMessageForResponse(code, res.status, message), {
+          status: res.status,
+          retryAfterSeconds: Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined,
+        })
+      }
+      return { data: JSON.parse(text) as T, headers: res.headers }
+    },
   )
-  if (!res.ok) {
-    let message = res.statusText
-    try {
-      const body = (await res.json()) as { message?: string }
-      if (body?.message) message = body.message
-    } catch {
-      /* 响应不是 JSON */
-    }
-    const code = errorCodeForResponse(res.status, message, res.headers.get('x-ratelimit-remaining'))
-    const retryAfter = Number(res.headers.get('retry-after'))
-    throw new GithubError(code, errorMessageForResponse(code, res.status, message), {
-      status: res.status,
-      retryAfterSeconds: Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined,
-    })
-  }
-  return res
 }
 
 /** 从 Link 头解析最后一页；没有分页时返回 1 */
@@ -178,6 +196,37 @@ function wait(ms: number, signal?: AbortSignal): Promise<void> {
   })
 }
 
+function readDataUrl(blob: Blob, signal: AbortSignal): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(abortError('已取消读取。'))
+      return
+    }
+    const reader = new FileReader()
+    const cleanup = () => signal.removeEventListener('abort', onAbort)
+    const onAbort = () => {
+      reader.abort()
+      cleanup()
+      reject(abortError('已取消读取。'))
+    }
+    reader.onload = () => {
+      cleanup()
+      resolve(String(reader.result))
+    }
+    reader.onerror = () => {
+      cleanup()
+      reject(reader.error)
+    }
+    signal.addEventListener('abort', onAbort, { once: true })
+    try {
+      reader.readAsDataURL(blob)
+    } catch (error) {
+      cleanup()
+      reject(error)
+    }
+  })
+}
+
 /**
  * 下载图片并转成 data URL。
  * 必须内联：Remotion 的 <Img> 会阻塞整帧等图片加载完，远程图片一挂就渲染超时；
@@ -187,23 +236,20 @@ async function toDataUrl(url: string, size = 128, options: FetchRepoDataOptions 
   const sized = `${url}${url.includes('?') ? '&' : '?'}s=${size}`
   for (let attempt = 0; attempt < AVATAR_RETRY_ATTEMPTS; attempt += 1) {
     try {
-      const res = await fetchWithTimeout(
+      return await fetchWithTimeout(
         sized,
         { mode: 'cors' },
         Math.min(options.timeoutMs ?? DEFAULT_TIMEOUT_MS, 12_000),
         options.signal,
+        async (res, signal) => {
+          if (!res.ok) {
+            await res.body?.cancel()
+            if (res.status < 500 && res.status !== 429) return null
+            throw new Error(`头像请求失败：${res.status}`)
+          }
+          return readDataUrl(await res.blob(), signal)
+        },
       )
-      if (!res.ok) {
-        if (res.status < 500 && res.status !== 429) return null
-        throw new Error(`头像请求失败：${res.status}`)
-      }
-      const blob = await res.blob()
-      return await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(String(reader.result))
-        reader.onerror = () => reject(reader.error)
-        reader.readAsDataURL(blob)
-      })
     } catch (error) {
       if (error instanceof GithubError && error.code === 'aborted') throw error
       if (attempt === AVATAR_RETRY_ATTEMPTS - 1) return null
@@ -280,24 +326,49 @@ export async function fetchRepoData(
   options?: FetchRepoDataOptions,
 ): Promise<RepoData> {
   const requestOptions = normalizeOptions(onStepOrOptions, options)
-  const onStep = requestOptions.onStep
   if (!token.trim()) {
     throw new Error('请先填写 GitHub token（只保存在你的浏览器里）')
   }
   const { owner, repo } = parseRepoInput(rawRepo)
 
+  // A failed API call must not leave sibling requests downloading in the background.
+  const controller = new AbortController()
+  const onAbort = () => controller.abort()
+  requestOptions.signal?.addEventListener('abort', onAbort, { once: true })
+  if (requestOptions.signal?.aborted) controller.abort()
+
+  try {
+    return await loadRepoData(owner, repo, token.trim(), { ...requestOptions, signal: controller.signal })
+  } catch (error) {
+    controller.abort()
+    throw error
+  } finally {
+    requestOptions.signal?.removeEventListener('abort', onAbort)
+  }
+}
+
+async function loadRepoData(
+  owner: string,
+  repo: string,
+  token: string,
+  requestOptions: FetchRepoDataOptions,
+): Promise<RepoData> {
+  const onStep = requestOptions.onStep
+
   onStep?.('读取仓库信息…')
-  const [userRes, repoRes] = await Promise.all([
-    gh(`/users/${owner}`, token, requestOptions),
-    gh(`/repos/${owner}/${repo}`, token, requestOptions),
+  const [{ data: user }, { data: info }] = await Promise.all([
+    gh<{ avatar_url: string }>(`/users/${owner}`, token, requestOptions),
+    gh<{ stargazers_count: number }>(`/repos/${owner}/${repo}`, token, requestOptions),
   ])
-  const user = (await userRes.json()) as { avatar_url: string }
-  const info = (await repoRes.json()) as { stargazers_count: number }
 
   // 点赞者按时间正序返回，「最新」在最后一页的末尾
   onStep?.('读取点赞者名单…')
   const perPage = 100
-  const first = await gh(`/repos/${owner}/${repo}/stargazers?per_page=${perPage}`, token, requestOptions)
+  const first = await gh<{ avatar_url?: string }[]>(
+    `/repos/${owner}/${repo}/stargazers?per_page=${perPage}`,
+    token,
+    requestOptions,
+  )
   const lastPage = parseLastPage(first.headers.get('link'))
   const pages = lastPage > 1 ? [lastPage - 1, lastPage] : [1]
 
@@ -306,8 +377,12 @@ export async function fetchRepoData(
     const res =
       page === 1
         ? first
-        : await gh(`/repos/${owner}/${repo}/stargazers?per_page=${perPage}&page=${page}`, token, requestOptions)
-    collected.push(...((await res.json()) as { avatar_url?: string }[]))
+        : await gh<{ avatar_url?: string }[]>(
+            `/repos/${owner}/${repo}/stargazers?per_page=${perPage}&page=${page}`,
+            token,
+            requestOptions,
+          )
+    collected.push(...res.data)
   }
   const avatarUrls = collected
     .slice(-50)
